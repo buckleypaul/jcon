@@ -1,0 +1,21 @@
+config JCON
+	bool "jcon: streaming JSON emitter"
+	help
+	  Enable the jcon streaming JSON emitter library.
+
+if JCON
+
+config JCON_MAX_DEPTH
+	int "Maximum JSON nesting depth"
+	default 16
+	help
+	  Maximum number of nested JSON containers (objects + arrays).
+
+config JCON_ENABLE_FLOAT
+	bool "Enable jcon_add_float / jcon_add_double"
+	default n
+	help
+	  Enable float and double value emitters. Pulls in snprintf with
+	  float support, which can be significant on minimal libc builds.
+
+endif
