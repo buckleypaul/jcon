@@ -1,0 +1,25 @@
+name: Build Zephyr sample
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout jcon
+        uses: actions/checkout@v4
+
+      - name: Setup Zephyr project
+        uses: zephyrproject-rtos/action-zephyr-setup@v1
+        with:
+          app-path: .
+          # native_sim builds with the host gcc, so no SDK toolchains needed.
+          toolchains: ""
+
+      - name: Build hello_jcon for native_sim
+        run: west build -b native_sim samples/zephyr/hello_jcon
