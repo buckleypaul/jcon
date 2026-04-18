@@ -1,5 +1,9 @@
 # jcon
 
+[![CI](https://github.com/buckleypaul/jcon/actions/workflows/ci.yml/badge.svg)](https://github.com/buckleypaul/jcon/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![C standard](https://img.shields.io/badge/C-11-blue.svg)](https://en.cppreference.com/w/c/11)
+
 Streaming JSON emitter for bare-metal C. Single static writer, zero heap,
 character-at-a-time output via a caller-supplied `putc`.
 
