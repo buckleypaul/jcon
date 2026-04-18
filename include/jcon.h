@@ -7,9 +7,12 @@
  *
  * USAGE (minimal):
  *
- *     static int uart_putc(char c) { return uart_write(&c, 1) == 1 ? 0 : -1; }
+ *     static int uart_putc(void *ctx, char c) {
+ *         (void)ctx;
+ *         return uart_write(&c, 1) == 1 ? 0 : -1;
+ *     }
  *
- *     jcon_start(false, uart_putc);         // opens the root object: "{"
+ *     jcon_start(false, uart_putc, NULL);   // opens the root object: "{"
  *     jcon_add("id", 42);                   // generic dispatch via _Generic
  *     jcon_add("ok", true);
  *     jcon_array_start("log");
@@ -66,10 +69,12 @@ extern "C" {
 /* -------------------------------------------------------------------------- */
 
 /*
- * Caller-supplied character sink. Return 0 on success, any nonzero value on
- * error. On first error the library latches JCON_ERR_IO and stops emitting.
+ * Caller-supplied character sink. `ctx` is whatever opaque pointer was passed
+ * to jcon_start; the library never dereferences it and is free to be NULL.
+ * Return 0 on success, any nonzero value on error. On first error the library
+ * latches JCON_ERR_IO and stops emitting.
  */
-typedef int (*jcon_putc_fn)(char c);
+typedef int (*jcon_putc_fn)(void *ctx, char c);
 
 typedef enum {
     JCON_OK        = 0,
@@ -88,7 +93,7 @@ typedef enum {
  *   minify  true  → no whitespace between tokens; no trailing newline
  *           false → pretty-print with JCON_INDENT per level and newlines
  */
-void jcon_start(bool minify, jcon_putc_fn putc);
+void jcon_start(bool minify, jcon_putc_fn putc, void *ctx);
 
 /*
  * Emit the root object's closing '}' (plus a trailing '\n' when not minified)

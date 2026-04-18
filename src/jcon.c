@@ -24,6 +24,7 @@
 
 struct jcon_writer {
     jcon_putc_fn  putc;
+    void         *ctx;
     bool          minify;
     bool          active;
     jcon_status_t status;
@@ -54,7 +55,7 @@ static inline void bit_set(uint8_t *bits, size_t i, bool v) {
 
 static void emit_char(char c) {
     if (g_writer.status != JCON_OK) return;
-    if (g_writer.putc(c) != 0) {
+    if (g_writer.putc(g_writer.ctx, c) != 0) {
         g_writer.status = JCON_ERR_IO;
     }
 }
@@ -62,7 +63,7 @@ static void emit_char(char c) {
 static void emit_str(const char *s) {
     if (g_writer.status != JCON_OK) return;
     while (*s) {
-        if (g_writer.putc(*s++) != 0) {
+        if (g_writer.putc(g_writer.ctx, *s++) != 0) {
             g_writer.status = JCON_ERR_IO;
             return;
         }
@@ -126,10 +127,11 @@ static void prep_child(const char *name) {
 /* Lifecycle                                                                  */
 /* -------------------------------------------------------------------------- */
 
-void jcon_start(bool minify, jcon_putc_fn putc) {
+void jcon_start(bool minify, jcon_putc_fn putc, void *ctx) {
     assert(putc != NULL);
     memset(&g_writer, 0, sizeof g_writer);
     g_writer.putc   = putc;
+    g_writer.ctx    = ctx;
     g_writer.minify = minify;
     g_writer.active = true;
     g_writer.status = JCON_OK;
