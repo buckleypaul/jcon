@@ -18,6 +18,10 @@ concurrently, or want the library to sanitize untrusted string data.
   `JCON_MAX_DEPTH`.
 - **Sink-agnostic.** You supply `int putc(char)`. The library never owns a
   buffer.
+- **Stateful sinks via `ctx`.** `jcon_start` takes a `void *ctx` that the
+  library threads into every `putc` call. Use it to point at a UART handle,
+  a ring buffer, or whatever your sink needs — no globals required. Pass
+  `NULL` if you don't need it.
 - **No string escaping.** Strings are emitted verbatim between `"..."`;
   caller is responsible for ensuring the contents are valid inside a JSON
   string body. If you need escaping, do it before calling. This keeps the
@@ -52,7 +56,12 @@ concurrently, or want the library to sanitize untrusted string data.
 ## Shape of the API
 
 ```c
-jcon_start(false, uart_putc);
+static int uart_putc(void *ctx, char c) {
+    (void)ctx;
+    return uart_write(&c, 1) == 1 ? 0 : -1;
+}
+
+jcon_start(false, uart_putc, NULL);
 jcon_add("id", 42);
 jcon_array_start("log");
     jcon_add(NULL, "boot");
@@ -74,15 +83,40 @@ jcon_end();
 Full API in [`include/jcon.h`](include/jcon.h); usage patterns and edge cases
 in [`tests/test_jcon.c`](tests/test_jcon.c).
 
-## Build
+## Build and integrate
+
+### As a drop-in source file
+
+Compile `src/jcon.c` with your project and put `include/` on the header
+search path. Works in any toolchain that has a C11 compiler.
+
+### Via the bundled Makefile (host test builds)
 
 ```sh
 make          # run debug, release (NDEBUG), and float test configurations
 make lib      # build/jcon.o for consumer linking
 ```
 
-To integrate: compile `src/jcon.c` with your project and put `include/` on
-the header search path.
+### As a CMake target
+
+```cmake
+add_subdirectory(path/to/jcon)
+target_link_libraries(my_app PRIVATE jcon::jcon)
+```
+
+CMake options: `-DJCON_MAX_DEPTH=<N>` (default 16), `-DJCON_ENABLE_FLOAT=ON`.
+
+### As a Zephyr module
+
+Add jcon to your `west.yml`, then in `prj.conf`:
+
+```
+CONFIG_JCON=y
+```
+
+The module exposes `CONFIG_JCON_MAX_DEPTH` and `CONFIG_JCON_ENABLE_FLOAT`
+via Kconfig. A runnable `native_sim` sample lives at
+`samples/zephyr/hello_jcon/`.
 
 ## License
 
