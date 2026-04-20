@@ -6,6 +6,7 @@
 #   make debug      run tests built with assertions active
 #   make release    run tests built with NDEBUG (exercises usage-error latching)
 #   make float      run tests built with JCON_ENABLE_FLOAT
+#   make sample     build + run the host-side demo (samples/host/main.c)
 #   make lib        build the object file for consumer linking
 #   make clean      remove build artifacts
 
@@ -19,7 +20,7 @@ SRC        := src/jcon.c
 TEST_SRC   := tests/test_jcon.c
 BUILD_DIR  := build
 
-.PHONY: all test debug release float lib clean
+.PHONY: all test debug release float sample lib clean
 
 all: test
 
@@ -52,6 +53,14 @@ $(BUILD_DIR)/test-float: $(SRC) $(TEST_SRC) include/jcon.h | $(BUILD_DIR)
 
 float: $(BUILD_DIR)/test-float
 	@echo "--- float build (JCON_ENABLE_FLOAT) ---"
+	@./$<
+
+# Host-side sample: emits JSON to stdout using fputc.
+$(BUILD_DIR)/host-sample: $(SRC) samples/host/main.c include/jcon.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -O2 $(SRC) samples/host/main.c -o $@
+
+sample: $(BUILD_DIR)/host-sample
+	@echo "--- host sample ---"
 	@./$<
 
 # Standalone library object (handy for consumer integration checks).

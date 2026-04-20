@@ -193,23 +193,30 @@ static void test_nested_pretty(void) {
 
 static void test_generic_dispatch(void) {
     jcon_start(true, test_putc, &g_sink);
-    int               i  = 7;
-    unsigned int      u  = 8u;
-    long long         ll = 9;
-    unsigned long long ull = 10ull;
-    bool              b  = true;
-    char              c  = 'y';
-    const char       *s  = "z";
+    int                 i   = 7;
+    unsigned int        u   = 8u;
+    long                l   = 11L;
+    unsigned long       ul  = 12uL;
+    long long           ll  = 9;
+    unsigned long long  ull = 10ull;
+    size_t              sz  = 13;
+    bool                b   = true;
+    char                c   = 'y';
+    const char         *s   = "z";
     jcon_add("i",   i);
     jcon_add("u",   u);
+    jcon_add("l",   l);
+    jcon_add("ul",  ul);
     jcon_add("ll",  ll);
     jcon_add("ull", ull);
+    jcon_add("sz",  sz);
     jcon_add("b",   b);
     jcon_add("c",   c);
     jcon_add("s",   s);
     EXPECT_EQ(jcon_end(), JCON_OK);
     EXPECT_STR_EQ(sink_cstr(&g_sink),
-        "{\"i\":7,\"u\":8,\"ll\":9,\"ull\":10,\"b\":true,\"c\":\"y\",\"s\":\"z\"}");
+        "{\"i\":7,\"u\":8,\"l\":11,\"ul\":12,\"ll\":9,\"ull\":10,"
+        "\"sz\":13,\"b\":true,\"c\":\"y\",\"s\":\"z\"}");
 }
 
 static void test_array_of_mixed(void) {
@@ -222,6 +229,60 @@ static void test_array_of_mixed(void) {
     jcon_array_end();
     EXPECT_EQ(jcon_end(), JCON_OK);
     EXPECT_STR_EQ(sink_cstr(&g_sink), "{\"mix\":[1,\"two\",true,null]}");
+}
+
+static void test_bytes_hex_basic(void) {
+    const uint8_t bytes[] = { 0x00, 0x01, 0xab, 0xff };
+    jcon_start(true, test_putc, &g_sink);
+    jcon_add_bytes_hex("mac", bytes, sizeof bytes);
+    EXPECT_EQ(jcon_end(), JCON_OK);
+    EXPECT_STR_EQ(sink_cstr(&g_sink), "{\"mac\":\"0001abff\"}");
+}
+
+static void test_bytes_hex_empty(void) {
+    jcon_start(true, test_putc, &g_sink);
+    jcon_add_bytes_hex("empty", NULL, 0);
+    EXPECT_EQ(jcon_end(), JCON_OK);
+    EXPECT_STR_EQ(sink_cstr(&g_sink), "{\"empty\":\"\"}");
+}
+
+/* -------------------------------------------------------------------------- */
+/* Array-root tests                                                           */
+/* -------------------------------------------------------------------------- */
+
+static void test_array_root_empty(void) {
+    jcon_start_array(true, test_putc, &g_sink);
+    EXPECT_EQ(jcon_end(), JCON_OK);
+    EXPECT_STR_EQ(sink_cstr(&g_sink), "[]");
+}
+
+static void test_array_root_values(void) {
+    jcon_start_array(true, test_putc, &g_sink);
+    jcon_add_int(NULL, 1);
+    jcon_add_int(NULL, 2);
+    jcon_add_int(NULL, 3);
+    EXPECT_EQ(jcon_end(), JCON_OK);
+    EXPECT_STR_EQ(sink_cstr(&g_sink), "[1,2,3]");
+}
+
+static void test_array_root_pretty(void) {
+    jcon_start_array(false, test_putc, &g_sink);
+    jcon_object_start(NULL);
+        jcon_add_int("x", 1);
+    jcon_object_end();
+    jcon_object_start(NULL);
+        jcon_add_int("x", 2);
+    jcon_object_end();
+    EXPECT_EQ(jcon_end(), JCON_OK);
+    EXPECT_STR_EQ(sink_cstr(&g_sink),
+        "[\n"
+        "  {\n"
+        "    \"x\": 1\n"
+        "  },\n"
+        "  {\n"
+        "    \"x\": 2\n"
+        "  }\n"
+        "]\n");
 }
 
 /* -------------------------------------------------------------------------- */
@@ -296,6 +357,12 @@ static void test_null_raw_value(void) {
     jcon_add_raw("r", NULL);
     EXPECT_EQ(jcon_status(), JCON_ERR_USAGE);
 }
+
+static void test_null_bytes_hex_with_len(void) {
+    jcon_start(true, test_putc, &g_sink);
+    jcon_add_bytes_hex("b", NULL, 4);      /* NULL + nonzero len: usage error */
+    EXPECT_EQ(jcon_status(), JCON_ERR_USAGE);
+}
 #endif /* NDEBUG */
 
 /* -------------------------------------------------------------------------- */
@@ -339,6 +406,12 @@ int main(void) {
     RUN(test_nested_pretty);
     RUN(test_generic_dispatch);
     RUN(test_array_of_mixed);
+    RUN(test_bytes_hex_basic);
+    RUN(test_bytes_hex_empty);
+
+    RUN(test_array_root_empty);
+    RUN(test_array_root_values);
+    RUN(test_array_root_pretty);
 
     RUN(test_io_error_sticky);
     RUN(test_start_clears_sticky);
@@ -349,6 +422,7 @@ int main(void) {
     RUN(test_end_at_root);
     RUN(test_null_string_value);
     RUN(test_null_raw_value);
+    RUN(test_null_bytes_hex_with_len);
 #endif
 
 #ifdef JCON_ENABLE_FLOAT

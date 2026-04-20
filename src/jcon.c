@@ -22,6 +22,15 @@
 #include <stdio.h>
 #include <string.h>
 
+/*
+ * Numeric scratch buffer size. Must hold the widest snprintf output the
+ * library can produce: int64_t needs 20 digits + sign + NUL = 22, and `%g`
+ * on a double tops out at roughly the same in practice. 32 gives headroom
+ * without being wasteful on tight targets.
+ */
+enum { JCON_NUMERIC_BUF = 32 };
+_Static_assert(JCON_NUMERIC_BUF >= 22, "numeric buffer must fit int64 + sign + NUL");
+
 struct jcon_writer {
     jcon_putc_fn  putc;
     void         *ctx;
@@ -127,7 +136,7 @@ static void prep_child(const char *name) {
 /* Lifecycle                                                                  */
 /* -------------------------------------------------------------------------- */
 
-void jcon_start(bool minify, jcon_putc_fn putc, void *ctx) {
+static void start_root(bool minify, jcon_putc_fn putc, void *ctx, bool root_is_object) {
     assert(putc != NULL);
     memset(&g_writer, 0, sizeof g_writer);
     g_writer.putc   = putc;
@@ -136,9 +145,16 @@ void jcon_start(bool minify, jcon_putc_fn putc, void *ctx) {
     g_writer.active = true;
     g_writer.status = JCON_OK;
     g_writer.depth  = 1;
-    bit_set(g_writer.is_object, 0, true);
-    bit_set(g_writer.has_child, 0, false);
-    emit_char('{');
+    bit_set(g_writer.is_object, 0, root_is_object);
+    emit_char(root_is_object ? '{' : '[');
+}
+
+void jcon_start(bool minify, jcon_putc_fn putc, void *ctx) {
+    start_root(minify, putc, ctx, true);
+}
+
+void jcon_start_array(bool minify, jcon_putc_fn putc, void *ctx) {
+    start_root(minify, putc, ctx, false);
 }
 
 jcon_status_t jcon_end(void) {
@@ -147,10 +163,11 @@ jcon_status_t jcon_end(void) {
     if (!g_writer.active || g_writer.depth != 1) {
         g_writer.status = JCON_ERR_USAGE;
     } else {
+        char close = bit_get(g_writer.is_object, 0) ? '}' : ']';
         if (bit_get(g_writer.has_child, 0)) {
             emit_newline_and_indent(0);
         }
-        emit_char('}');
+        emit_char(close);
         if (!g_writer.minify) emit_char('\n');
     }
     g_writer.active = false;
@@ -219,7 +236,7 @@ void jcon_array_end(void)                { container_end(']', false);         }
 
 #define JCON_DEFINE_NUMERIC_(suffix, ctype, fmt)              \
     void jcon_add_##suffix(const char *name, ctype value) {   \
-        char buf[32];                                         \
+        char buf[JCON_NUMERIC_BUF];                           \
         prep_child(name);                                     \
         (void)snprintf(buf, sizeof buf, fmt, value);          \
         emit_str(buf);                                        \
@@ -266,16 +283,33 @@ void jcon_add_null(const char *name) {
     emit_str("null");
 }
 
+void jcon_add_bytes_hex(const char *name, const void *bytes, size_t len) {
+    static const char hex[] = "0123456789abcdef";
+    assert((bytes != NULL || len == 0) && "jcon_add_bytes_hex: NULL with len > 0");
+    if (bytes == NULL && len != 0) {
+        g_writer.status = JCON_ERR_USAGE;
+        return;
+    }
+    prep_child(name);
+    emit_char('"');
+    const uint8_t *p = bytes;
+    for (size_t i = 0; i < len; i++) {
+        emit_char(hex[p[i] >> 4]);
+        emit_char(hex[p[i] & 0x0fu]);
+    }
+    emit_char('"');
+}
+
 #ifdef JCON_ENABLE_FLOAT
 void jcon_add_float(const char *name, float value) {
-    char buf[32];
+    char buf[JCON_NUMERIC_BUF];
     prep_child(name);
     (void)snprintf(buf, sizeof buf, "%g", (double)value);
     emit_str(buf);
 }
 
 void jcon_add_double(const char *name, double value) {
-    char buf[32];
+    char buf[JCON_NUMERIC_BUF];
     prep_child(name);
     (void)snprintf(buf, sizeof buf, "%g", value);
     emit_str(buf);

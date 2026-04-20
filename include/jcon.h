@@ -50,7 +50,6 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <inttypes.h>
-#include <limits.h>
 
 #ifndef JCON_MAX_DEPTH
 #define JCON_MAX_DEPTH 16
@@ -87,18 +86,24 @@ typedef enum {
 /* -------------------------------------------------------------------------- */
 
 /*
- * Reset internal state, install the putc callback, and emit the root object's
- * opening '{'. Abandons any in-progress document. Clears sticky status.
+ * Reset internal state, install the putc callback, and emit the root
+ * container's opening token. Abandons any in-progress document. Clears sticky
+ * status.
  *
  *   minify  true  → no whitespace between tokens; no trailing newline
  *           false → pretty-print with JCON_INDENT per level and newlines
+ *
+ * jcon_start       opens an object root: emits '{'. Child emits require a name.
+ * jcon_start_array opens an array  root: emits '['. Child emits pass NULL.
  */
 void jcon_start(bool minify, jcon_putc_fn putc, void *ctx);
+void jcon_start_array(bool minify, jcon_putc_fn putc, void *ctx);
 
 /*
- * Emit the root object's closing '}' (plus a trailing '\n' when not minified)
- * and return the final sticky status. After this call the writer is inactive
- * until the next jcon_start().
+ * Emit the root container's closing token ('}' or ']' depending on what
+ * jcon_start* opened), plus a trailing '\n' when not minified, and return the
+ * final sticky status. After this call the writer is inactive until the next
+ * jcon_start*().
  */
 jcon_status_t jcon_end(void);
 
@@ -162,6 +167,13 @@ JCON_TYPES(JCON_DECL_FN_)
 /* Not in JCON_TYPES — no value argument. */
 void jcon_add_null(const char *name);
 
+/*
+ * Emit a byte buffer as a lowercase hex JSON string: 2 hex chars per byte,
+ * no separator, no `0x` prefix. `bytes` may be NULL when `len == 0`.
+ * Deliberately not in the _Generic dispatch (takes a length, not a value).
+ */
+void jcon_add_bytes_hex(const char *name, const void *bytes, size_t len);
+
 #ifdef JCON_ENABLE_FLOAT
 void jcon_add_float (const char *name, float value);
 void jcon_add_double(const char *name, double value);
@@ -173,33 +185,26 @@ void jcon_add_double(const char *name, double value);
 /* jcon_add(name, value) picks the right jcon_add_<suffix> at compile time    */
 /* based on the type of `value`, using C11 _Generic.                          */
 /*                                                                            */
-/* Notes on type aliasing:                                                    */
+/* Notes on type identity:                                                    */
+/*   - _Generic matches on type identity, not representation. `long` and      */
+/*     `long long` are distinct types per the C standard even when they have  */
+/*     the same size, so each needs its own branch. Routing both `long` and   */
+/*     `long long` to jcon_add_int64 is always safe: int64_t is guaranteed to */
+/*     hold any long on every ILP32/LP32/LLP64/LP64 platform.                 */
 /*   - int32_t is usually a typedef for int (and uint32_t for unsigned int).  */
-/*     Listing both in a _Generic controlling expression is a "same type"     */
-/*     error, so we only list the fundamental types here. Passing an int32_t  */
-/*     variable resolves to the `int` branch on such platforms, which is      */
-/*     fine because jcon_add_int formats with %d (correct for 32-bit int).    */
-/*   - On platforms where int32_t is not int (rare), call jcon_add_int32      */
-/*     directly instead of using the generic macro.                           */
-/*   - `long` is handled conditionally below because it may alias either      */
-/*     `int` or `long long` depending on the platform.                        */
-/*   - jcon_add_raw and jcon_add_null are deliberately excluded from the      */
-/*     generic macro — call them by full name.                                */
+/*     Listing both would be a "compatible type" error, so only the           */
+/*     fundamental types appear here. An int32_t variable resolves to the     */
+/*     `int` branch on such platforms, which is correct because jcon_add_int  */
+/*     formats with %d.                                                       */
+/*   - size_t is `unsigned long` on LP64 and `unsigned long long` on LLP64;   */
+/*     both are covered. On ILP32 it's `unsigned int`, also covered.          */
+/*   - jcon_add_raw, jcon_add_null, and jcon_add_bytes_hex are deliberately   */
+/*     excluded — call them by full name.                                     */
 /*   - C11/C99 <stdbool.h> defines `true`/`false` as int constants (1/0),     */
 /*     so `jcon_add("ok", true)` dispatches to jcon_add_int and emits `1`,    */
 /*     not `true`. Pass a `bool` variable, cast (`(bool)true`), or call       */
 /*     jcon_add_bool directly. C23 fixes this by typing the literals as bool. */
 /* -------------------------------------------------------------------------- */
-
-#if LONG_MAX == INT_MAX
-#  define JCON_GENERIC_LONG_  /* long == int, already covered */
-#elif LONG_MAX == LLONG_MAX
-#  define JCON_GENERIC_LONG_  /* long == long long, covered by the int64 branch */
-#else
-#  define JCON_GENERIC_LONG_                  \
-          long:               jcon_add_int64, \
-          unsigned long:      jcon_add_uint64,
-#endif
 
 #ifdef JCON_ENABLE_FLOAT
 #  define JCON_GENERIC_FLOAT_            \
@@ -212,9 +217,10 @@ void jcon_add_double(const char *name, double value);
 #define jcon_add(name, value) _Generic((value),    \
         int:                jcon_add_int,          \
         unsigned int:       jcon_add_uint,         \
+        long:               jcon_add_int64,        \
+        unsigned long:      jcon_add_uint64,       \
         long long:          jcon_add_int64,        \
         unsigned long long: jcon_add_uint64,       \
-        JCON_GENERIC_LONG_                         \
         JCON_GENERIC_FLOAT_                        \
         bool:               jcon_add_bool,         \
         char:               jcon_add_char,         \

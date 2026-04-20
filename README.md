@@ -32,7 +32,8 @@ concurrently, or want the library to sanitize untrusted string data.
   core small and avoids pulling in a UTF-8/escape ruleset you might not want.
 - **Sticky errors.** The first `putc` failure latches; subsequent emits
   no-op. Check once at `jcon_end()` — no per-call branching in caller code.
-- **Root is always an object.** No root arrays.
+- **Root is an object by default.** Use `jcon_start_array` when you need an
+  array at the top level (handy for streaming NDJSON-style arrays of records).
 - **Not thread-safe, not reentrant.** One global writer; don't call `jcon_*`
   from inside `putc`.
 - **Typed emitters with optional `_Generic` dispatch.** Call
