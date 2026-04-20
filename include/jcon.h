@@ -96,8 +96,8 @@ typedef enum {
  * jcon_start       opens an object root: emits '{'. Child emits require a name.
  * jcon_start_array opens an array  root: emits '['. Child emits pass NULL.
  */
-void jcon_start(bool minify, jcon_putc_fn putc, void *ctx);
-void jcon_start_array(bool minify, jcon_putc_fn putc, void *ctx);
+void jcon_start(bool minify, jcon_putc_fn write, void *ctx);
+void jcon_start_array(bool minify, jcon_putc_fn write, void *ctx);
 
 /*
  * Emit the root container's closing token ('}' or ']' depending on what

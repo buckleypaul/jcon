@@ -32,7 +32,7 @@ enum { JCON_NUMERIC_BUF = 32 };
 _Static_assert(JCON_NUMERIC_BUF >= 22, "numeric buffer must fit int64 + sign + NUL");
 
 struct jcon_writer {
-    jcon_putc_fn  putc;
+    jcon_putc_fn  write;
     void         *ctx;
     bool          minify;
     bool          active;
@@ -64,7 +64,7 @@ static inline void bit_set(uint8_t *bits, size_t i, bool v) {
 
 static void emit_char(char c) {
     if (g_writer.status != JCON_OK) return;
-    if (g_writer.putc(g_writer.ctx, c) != 0) {
+    if (g_writer.write(g_writer.ctx, c) != 0) {
         g_writer.status = JCON_ERR_IO;
     }
 }
@@ -72,7 +72,7 @@ static void emit_char(char c) {
 static void emit_str(const char *s) {
     if (g_writer.status != JCON_OK) return;
     while (*s) {
-        if (g_writer.putc(g_writer.ctx, *s++) != 0) {
+        if (g_writer.write(g_writer.ctx, *s++) != 0) {
             g_writer.status = JCON_ERR_IO;
             return;
         }
@@ -136,10 +136,10 @@ static void prep_child(const char *name) {
 /* Lifecycle                                                                  */
 /* -------------------------------------------------------------------------- */
 
-static void start_root(bool minify, jcon_putc_fn putc, void *ctx, bool root_is_object) {
-    assert(putc != NULL);
+static void start_root(bool minify, jcon_putc_fn write, void *ctx, bool root_is_object) {
+    assert(write != NULL);
     memset(&g_writer, 0, sizeof g_writer);
-    g_writer.putc   = putc;
+    g_writer.write  = write;
     g_writer.ctx    = ctx;
     g_writer.minify = minify;
     g_writer.active = true;
@@ -149,12 +149,12 @@ static void start_root(bool minify, jcon_putc_fn putc, void *ctx, bool root_is_o
     emit_char(root_is_object ? '{' : '[');
 }
 
-void jcon_start(bool minify, jcon_putc_fn putc, void *ctx) {
-    start_root(minify, putc, ctx, true);
+void jcon_start(bool minify, jcon_putc_fn write, void *ctx) {
+    start_root(minify, write, ctx, true);
 }
 
-void jcon_start_array(bool minify, jcon_putc_fn putc, void *ctx) {
-    start_root(minify, putc, ctx, false);
+void jcon_start_array(bool minify, jcon_putc_fn write, void *ctx) {
+    start_root(minify, write, ctx, false);
 }
 
 jcon_status_t jcon_end(void) {
